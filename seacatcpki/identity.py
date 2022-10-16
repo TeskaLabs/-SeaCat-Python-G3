@@ -5,6 +5,7 @@ import base64
 
 import requests
 import cryptography.x509
+import cryptography.hazmat.primitives.serialization
 
 from .misc.eckeygen import generate_ec_keypair
 from .misc.build_cr import build_certificate_request
@@ -47,8 +48,8 @@ class Identity(object):
 
 		# Load a certificate
 		try:
-			with open("seacat_cert.der", "rb") as fi:
-				self.Certificate = cryptography.x509.load_der_x509_certificate(fi.read())
+			with open("seacat_cert.pem", "rb") as fi:
+				self.Certificate = cryptography.x509.load_pem_x509_certificate(fi.read())
 		except FileNotFoundError:
 			self.Certificate = None
 			self.KeyPair = None
@@ -73,7 +74,7 @@ class Identity(object):
 			self.KeyPair = generate_ec_keypair("seacat_key")
 			self.Certificate = None
 			try:
-				os.unlink("seacat_cert.der")
+				os.unlink("seacat_cert.pem")
 			except FileNotFoundError:
 				pass
 
@@ -83,7 +84,7 @@ class Identity(object):
 
 	def revoke(self):
 		try:
-			os.unlink("seacat_cert.der")
+			os.unlink("seacat_cert.pem")
 		except FileNotFoundError:
 			pass
 
@@ -101,7 +102,7 @@ class Identity(object):
 
 	def enroll_certificate_request(self, cr: bytes):
 		url = self.SeaCat.ApiURL + '/enroll'
-		print(">>>", url)
+
 		# TODO: verify=False is a temporary fix
 		r = requests.put(url, cr, headers={'Content-Type': 'application/octet-stream'}, verify=False)
 		if r.status_code != 200:
@@ -110,8 +111,12 @@ class Identity(object):
 		rawcert = r.content
 		certificate = cryptography.x509.load_der_x509_certificate(rawcert)
 		if certificate is not None:
-			with open("seacat_cert.der", "wb") as fo:
-				fo.write(rawcert)
+			with open("seacat_cert.pem", "wb") as fo:
+				fo.write(
+					certificate.public_bytes(
+						cryptography.hazmat.primitives.serialization.Encoding.PEM
+					)
+				)
 
 		self.load()
 
